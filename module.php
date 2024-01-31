@@ -160,8 +160,6 @@
 				$this->apiCommand($approot, array_pull($set, 'method'), $set);
 			}
 
-			$this->track_site($hostname, $path);
-
 			$this->fortify($hostname, $path, Module\Support\Webapps\App\Type\Matomo\Handler::DEFAULT_FORTIFICATION);
 			$this->notifyInstalled($hostname, $path, $opts);
 
@@ -201,20 +199,47 @@
 			$path = rtrim($path, '/');
 		}
 
-		public function track_site(string $hostname, string $path = '', string $tracker = null): ?string
+		public function track_site(string $matomoAppRoot, string $siteAppRoot, array $siteUrls, string $siteName = 'New Site'): ?string
 		{
-			$approot = $this->getAppRoot($hostname, $path);
-			$ret = $this->apiCommand($approot, 'SitesManager.addSite', "$hostname/$path", "$hostname/$path");
-			if (!$ret['success']) {
+			$prefs = \Preferences::factory($this->getAuthContext());
+
+			if (isset($prefs['matomo'][$matomoAppRoot][$siteAppRoot])) {
+				return error('This site is already tracked');
+			}
+
+			$result = $this->apiCommand($matomoAppRoot, 'SitesManager.addSite', [
+				'siteName' => $siteName,
+				'urls' => implode(',', $siteUrls)
+			]);
+
+			if ($result['success'] !== true) {
 				return false;
 			}
+			$siteId = $result['output']['value'];
+
+			$prefs->unlock($this->getApnscpFunctionInterceptor());
+			$prefs['matomo'][$matomoAppRoot][$siteAppRoot] = $siteId;
+			array_set($prefs, 'matomo', $prefs['matomo']);
+			$prefs->sync();
+
+			return true;
 		}
 
-		public function untrack_site(string $hostname, string $path = '', string $tracker = null): bool
+		public function untrack_site(string $matomoAppRoot, string $siteAppRoot): ?string
 		{
-			$approot = $this->getAppRoot($hostname, $path);
-			$ret = $this->apiCommand($approot, 'SitesManager.addSite', "$hostname/$path", "$hostname/$path");
-			return false;
+			$prefs = \Preferences::factory($this->getAuthContext());
+			$prefs->unlock($this->getApnscpFunctionInterceptor());
+			unset($prefs['matomo'][$matomoAppRoot][$siteAppRoot]);
+			array_set($prefs, 'matomo', $prefs['matomo']);
+			$prefs->sync();
+
+			return true;
+		}
+
+		public function list_tracked_sites(): ?array
+		{
+			$prefs = \Preferences::factory($this->getAuthContext());
+			return $prefs['matomo'] ?? [];
 		}
 
 		public function tracked(string $hostname, string $path = ''): bool
@@ -276,7 +301,7 @@
 			$ret = PhpWrapper::instantiateContexted($this->getAuthContextFromDocroot($approot))->exec(
 				$approot, 'console climulti:request --superuser %s', [http_build_query($params + ['module' => 'API', 'method' => $method, 'format' => 'json'])]);
 			$ret['stdout'] = json_decode($ret['stdout'], true);
-			if ($ret['stdout']['result'] === 'error') {
+			if ($ret['stdout']['result'] ?? null === 'error') {
 				$ret['success'] = false;
 			}
 			return $ret;
