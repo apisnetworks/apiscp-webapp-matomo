@@ -10,8 +10,6 @@
 
 	use Piwik\Db\Schema;
 	use Piwik\Plugin\ConsoleCommand;
-	use Symfony\Component\Console\Input\InputInterface;
-	use Symfony\Component\Console\Output\OutputInterface;
 
 	/**
 	 * Administration command that optimizes archive tables (even if they use InnoDB).
@@ -25,8 +23,10 @@
 			$this->setDescription("Create Matomo tables at install");
 		}
 
-		protected function execute(InputInterface $input, OutputInterface $output)
+		protected function doExecute(): int
 		{
 			Schema::getInstance()->createTables();
+
+			return self::SUCCESS;
 		}
 	}

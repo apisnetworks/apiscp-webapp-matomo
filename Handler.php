@@ -29,4 +29,15 @@
 		{
 			return version_compare($this->php_version(), '7', '>=');
 		}
+
+		public function handle(array $params): bool
+        {
+			if (isset($params['webapps'])) {
+				\Lararia\Bootstrapper::minstrap();
+				echo view('@webapp(matomo)::partials.webapps-list', ['app' => $this]);
+				exit;
+			}
+
+			return parent::handle($params);
+		}
 	}
